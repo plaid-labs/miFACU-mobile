@@ -19,17 +19,41 @@ Notifications.setNotificationHandler({
   }),
 });
 
+import { api } from '../src/services/api';
+
 export default function ParcialesScreen() {
   const router = useRouter();
-  
-  // Datos iniciales
-  const [eventos, setEventos] = useState([
-    { id: 1, titulo: "1º PARCIAL", materia: "ANÁLISIS MAT. II", tipo: 'PARCIAL', fecha: "25/04", hora: "18:00", color: '#FF3B30', avisar: true },
-    { id: 2, titulo: "TP LABORATORIO", materia: "FÍSICA II", tipo: 'ENTREGA', fecha: "30/04", hora: "23:59", color: '#007AFF', avisar: true },
-  ]);
+
+  const [eventos, setEventos] = useState<any[]>([]);
+
+  const loadData = async () => {
+    try {
+      const data = await api.getRecordatorios();
+      // Map API data to component format
+      const mapped = data.map(item => ({
+        id: item.id,
+        titulo: item.nombre,
+        materia: item.materia ? item.materia.nombre : 'Sin Materia',
+        tipo: item.tipo === 'Parcial' ? 'PARCIAL' : 'ENTREGA', // Adjust enum case if needed
+        fecha: item.fecha.toString().split('T')[0].split('-').reverse().slice(0, 2).join('/'), // YYYY-MM-DD -> DD/MM
+        hora: item.hora ? item.hora.toString().slice(0, 5) : "00:00",
+        color: item.color,
+        avisar: item.notificado
+      }));
+      setEventos(mapped);
+    } catch (e) {
+      console.error(e);
+      // Keep silent or show error? For now silent as user might not have DB running
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    // ... notifications ..
+  }, []);
 
   const [modalVisible, setModalVisible] = useState(false);
-  
+
   // Estados del Formulario
   const [nuevoTitulo, setNuevoTitulo] = useState('');
   const [nuevaMateria, setNuevaMateria] = useState('');
@@ -41,23 +65,13 @@ export default function ParcialesScreen() {
   const notificationListener = useRef();
   const responseListener = useRef();
 
-  useEffect(() => {
-    registerForPushNotificationsAsync();
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {});
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {});
-    return () => {
-      if (notificationListener.current) notificationListener.current.remove();
-      if (responseListener.current) responseListener.current.remove();
-    };
-  }, []);
-
   // --- LÓGICA DE FECHAS ---
   const parseDate = (fechaStr) => {
     if (!fechaStr || !fechaStr.includes('/')) return new Date();
     const [dia, mes] = fechaStr.split('/').map(Number);
     const hoy = new Date();
     let anio = hoy.getFullYear();
-    if (mes < (hoy.getMonth() + 1)) anio += 1; 
+    if (mes < (hoy.getMonth() + 1)) anio += 1;
     return new Date(anio, mes - 1, dia);
   };
 
@@ -78,12 +92,19 @@ export default function ParcialesScreen() {
     return [...eventos].sort((a, b) => parseDate(a.fecha) - parseDate(b.fecha));
   };
 
-  // --- ACCIONES ---
-  const confirmarEliminacion = (id) => {
-    Alert.alert("¿Borrar?", "Se eliminará de la lista.", [
-      { text: "Cancelar", style: "cancel" },
-      { text: "Borrar", style: "destructive", onPress: () => setEventos(prev => prev.filter(e => e.id !== id)) }
-    ]);
+
+  // --- INPUTS ---
+  const handleChangeFecha = (text) => {
+    let limpio = text.replace(/[^0-9]/g, '');
+    if (text.length < nuevaFecha.length && nuevaFecha.endsWith('/')) limpio = limpio.slice(0, -1);
+    if (limpio.length > 2) limpio = limpio.slice(0, 2) + '/' + limpio.slice(2, 4);
+    setNuevaFecha(limpio);
+  };
+
+  const handleChangeHora = (text) => {
+    let limpio = text.replace(/[^0-9]/g, '');
+    if (limpio.length > 2) limpio = limpio.slice(0, 2) + ':' + limpio.slice(2, 4);
+    setNuevaHora(limpio);
   };
 
   const toggleNotificacion = (id) => {
@@ -97,23 +118,9 @@ export default function ParcialesScreen() {
     }));
   };
 
-  // --- INPUTS ---
-  const handleChangeFecha = (text) => {
-    let limpio = text.replace(/[^0-9]/g, '');
-    if (text.length < nuevaFecha.length && nuevaFecha.endsWith('/')) limpio = limpio.slice(0, -1);
-    if (limpio.length > 2) limpio = limpio.slice(0, 2) + '/' + limpio.slice(2, 4);
-    setNuevaFecha(limpio);
-  };
-  
-  const handleChangeHora = (text) => {
-    let limpio = text.replace(/[^0-9]/g, '');
-    if (limpio.length > 2) limpio = limpio.slice(0, 2) + ':' + limpio.slice(2, 4);
-    setNuevaHora(limpio);
-  };
-
   // --- NOTIFICACIÓN ---
   const programarNotificacion = async (titulo, materia, tipo) => {
-    const cuerpo = tipo === 'PARCIAL' 
+    const cuerpo = tipo === 'PARCIAL'
       ? `¡A estudiar! Mañana es el ${titulo} de ${materia}.`
       : `¡Atención! Mañana vence la entrega: ${titulo} (${materia}).`;
 
@@ -126,23 +133,31 @@ export default function ParcialesScreen() {
   };
 
   const handleAgregar = async () => {
-    if (!nuevaMateria || !nuevaTitulo || nuevaFecha.length < 5) return Alert.alert("Faltan datos");
+    if (!nuevaMateria || !nuevoTitulo || nuevaFecha.length < 5) return Alert.alert("Faltan datos");
 
-    const nuevo = { 
-      id: Date.now(), 
-      titulo: nuevoTitulo.toUpperCase(),
-      materia: nuevaMateria.toUpperCase(), 
-      tipo: nuevoTipo,
-      fecha: nuevaFecha, 
-      hora: nuevaHora || "18:00", 
-      color: nuevoColor,
-      avisar: true 
+    // Convert DD/MM -> YYYY-MM-DD for backend
+    const [d, m] = nuevaFecha.split('/');
+    const currentYear = new Date().getFullYear();
+    const isoDate = `${currentYear}-${m}-${d}`;
+
+    const nuevo = {
+      nombre: nuevoTitulo.toUpperCase(),
+      materiaNombre: nuevaMateria.toUpperCase(),
+      tipo: nuevoTipo === 'PARCIAL' ? 'Parcial' : 'Entrega',
+      fecha: isoDate,
+      hora: nuevaHora || "18:00",
+      color: nuevoColor
     };
 
-    setEventos([...eventos, nuevo]);
-    setModalVisible(false);
-    await programarNotificacion(nuevoTitulo, nuevaMateria, nuevoTipo);
-    
+    try {
+      await api.createRecordatorio(nuevo);
+      setModalVisible(false);
+      loadData(); // Reload from DB
+      await programarNotificacion(nuevoTitulo, nuevaMateria, nuevoTipo);
+    } catch (e) {
+      Alert.alert("Error creando evento");
+    }
+
     // Reset
     setNuevoTitulo(''); setNuevaMateria(''); setNuevaFecha(''); setNuevaHora(''); setNuevoColor(PALETA_COLORES[0]);
   };
@@ -162,36 +177,36 @@ export default function ParcialesScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <SafeAreaView style={styles.safeArea}>
-        
+
         {/* HEADER */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
             <Ionicons name="close" size={30} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Entregas y Parciales</Text>
-          <View style={{width: 30}} />
+          <View style={{ width: 30 }} />
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {getEventosOrdenados().map((evento) => (
             <View key={evento.id} style={styles.swipeWrapper}>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
-                snapToOffsets={[0, BUTTON_WIDTH]} 
+                snapToOffsets={[0, BUTTON_WIDTH]}
                 snapToEnd={false}
                 decelerationRate="fast"
                 contentContainerStyle={{ width: CARD_WIDTH + BUTTON_WIDTH }}
               >
-                
+
                 {/* TARJETA */}
                 <View style={[styles.card, { backgroundColor: evento.color }]}>
                   {/* Ícono según Tipo */}
                   <View style={styles.iconCircle}>
-                    <Ionicons 
-                      name={evento.tipo === 'PARCIAL' ? "school" : "document-text"} 
-                      size={24} 
-                      color={evento.color} 
+                    <Ionicons
+                      name={evento.tipo === 'PARCIAL' ? "school" : "document-text"}
+                      size={24}
+                      color={evento.color}
                     />
                   </View>
 
@@ -213,13 +228,13 @@ export default function ParcialesScreen() {
               </ScrollView>
             </View>
           ))}
-          
+
           {eventos.length === 0 && <Text style={styles.emptyText}>¡Todo despejado! No hay fechas próximas.</Text>}
-          <View style={{height: 100}}/>
+          <View style={{ height: 100 }} />
         </ScrollView>
 
         <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-          <Ionicons name="add" size={32} color="#007AFF" /> 
+          <Ionicons name="add" size={32} color="#007AFF" />
         </TouchableOpacity>
       </SafeAreaView>
 
@@ -228,19 +243,19 @@ export default function ParcialesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Nuevo Evento</Text>
-            
+
             {/* SELECTOR TIPO */}
             <View style={styles.typeSelector}>
-              <TouchableOpacity 
-                style={[styles.typeBtn, nuevoTipo === 'PARCIAL' && styles.typeBtnActive]} 
+              <TouchableOpacity
+                style={[styles.typeBtn, nuevoTipo === 'PARCIAL' && styles.typeBtnActive]}
                 onPress={() => setNuevoTipo('PARCIAL')}
               >
                 <Ionicons name="school-outline" size={20} color={nuevoTipo === 'PARCIAL' ? "#fff" : "#666"} />
                 <Text style={[styles.typeText, nuevoTipo === 'PARCIAL' && styles.typeTextActive]}>Parcial</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.typeBtn, nuevoTipo === 'ENTREGA' && styles.typeBtnActive]} 
+
+              <TouchableOpacity
+                style={[styles.typeBtn, nuevoTipo === 'ENTREGA' && styles.typeBtnActive]}
                 onPress={() => setNuevoTipo('ENTREGA')}
               >
                 <Ionicons name="document-text-outline" size={20} color={nuevoTipo === 'ENTREGA' ? "#fff" : "#666"} />
@@ -249,17 +264,17 @@ export default function ParcialesScreen() {
             </View>
 
             <Text style={styles.label}>Materia</Text>
-            <TextInput style={styles.input} placeholder="Ej: FÍSICA II" value={nuevaMateria} onChangeText={setNuevaMateria} autoCapitalize="characters"/>
-            
+            <TextInput style={styles.input} placeholder="Ej: FÍSICA II" value={nuevaMateria} onChangeText={setNuevaMateria} autoCapitalize="characters" />
+
             <Text style={styles.label}>Título del Evento</Text>
-            <TextInput style={styles.input} placeholder={nuevoTipo === 'PARCIAL' ? "Ej: 1er Parcial" : "Ej: TP Laboratorio"} value={nuevoTitulo} onChangeText={setNuevoTitulo} autoCapitalize="characters"/>
+            <TextInput style={styles.input} placeholder={nuevoTipo === 'PARCIAL' ? "Ej: 1er Parcial" : "Ej: TP Laboratorio"} value={nuevoTitulo} onChangeText={setNuevoTitulo} autoCapitalize="characters" />
 
             <View style={styles.rowInputs}>
-              <View style={{flex: 1, marginRight: 10}}>
+              <View style={{ flex: 1, marginRight: 10 }}>
                 <Text style={styles.label}>Fecha (DD/MM)</Text>
                 <TextInput style={styles.input} placeholder="DD/MM" value={nuevaFecha} onChangeText={handleChangeFecha} keyboardType="numeric" maxLength={5} />
               </View>
-              <View style={{flex: 1}}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.label}>Hora</Text>
                 <TextInput style={styles.input} placeholder="HH:MM" value={nuevaHora} onChangeText={handleChangeHora} keyboardType="numeric" maxLength={5} />
               </View>
@@ -301,10 +316,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 14, padding: 15, flexDirection: 'row', alignItems: 'center',
     width: CARD_WIDTH, height: 100, elevation: 3,
-    shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.2, shadowRadius: 3
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3
   },
   iconCircle: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', marginRight: 15 },
-  
+
   cardInfo: { flex: 1 },
   cardMateria: { fontSize: 12, fontWeight: '600', color: 'rgba(255,255,255,0.8)', marginBottom: 2 },
   cardTitle: { fontSize: 16, fontWeight: '900', color: '#fff', marginBottom: 4 },
@@ -312,7 +327,7 @@ const styles = StyleSheet.create({
 
   bellButton: { padding: 8, backgroundColor: 'rgba(0,0,0,0.1)', borderRadius: 20 },
   deleteButton: { backgroundColor: '#f2f2f2', width: BUTTON_WIDTH, height: 100, justifyContent: 'center', alignItems: 'center', borderTopRightRadius: 14, borderBottomRightRadius: 14 },
-  
+
   emptyText: { textAlign: 'center', color: '#999', marginTop: 40, fontSize: 16 },
   fab: { position: 'absolute', bottom: 30, right: 20, backgroundColor: '#F2F2F7', borderRadius: 30, width: 60, height: 60, justifyContent: 'center', alignItems: 'center', shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 5, elevation: 5 },
 
@@ -323,7 +338,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, color: '#666', marginBottom: 5, fontWeight: '600' },
   input: { backgroundColor: '#F2F2F7', borderRadius: 8, padding: 12, fontSize: 16, marginBottom: 15 },
   rowInputs: { flexDirection: 'row', justifyContent: 'space-between' },
-  
+
   typeSelector: { flexDirection: 'row', backgroundColor: '#F2F2F7', borderRadius: 10, padding: 4, marginBottom: 20 },
   typeBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, borderRadius: 8 },
   typeBtnActive: { backgroundColor: '#007AFF', shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
@@ -333,7 +348,7 @@ const styles = StyleSheet.create({
   colorPalette: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20, marginTop: 5 },
   colorCircle: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   colorSelected: { borderWidth: 3, borderColor: '#ddd' },
-  
+
   modalButtons: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
   btnCancel: { flex: 1, padding: 15, alignItems: 'center' },
   btnConfirm: { flex: 1, backgroundColor: '#007AFF', borderRadius: 10, padding: 15, alignItems: 'center' },

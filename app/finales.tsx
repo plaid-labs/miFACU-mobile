@@ -25,15 +25,12 @@ Notifications.setNotificationHandler({
   }),
 });
 
+import { api } from '../src/services/api';
+
 export default function FinalesScreen() {
   const router = useRouter();
-  
-  // Agregamos 'avisar: true' por defecto
-  const [examenes, setExamenes] = useState([
-    { id: 1, materia: "DISEÑO DE SISTEMAS", fecha: "19/02", hora: "09:00", color: '#FF9500', avisar: true },
-    { id: 2, materia: "ARQUITECTURA DE COMP.", fecha: "19/02", hora: "14:00", color: '#007AFF', avisar: true },
-    { id: 3, materia: "ANÁLISIS MAT. I", fecha: "18/02", hora: "09:00", color: '#FF3B30', avisar: false },
-  ]);
+
+  const [examenes, setExamenes] = useState<any[]>([]);
 
   const [modalVisible, setModalVisible] = useState(false);
   const [nuevaMateria, setNuevaMateria] = useState('');
@@ -44,10 +41,26 @@ export default function FinalesScreen() {
   const notificationListener = useRef();
   const responseListener = useRef();
 
+  const loadData = async () => {
+    try {
+      const data = await api.getFinales();
+      const mapped = data.map(item => ({
+        id: item.id,
+        materia: item.materia ? item.materia.nombre : 'Unknown',
+        fecha: item.fecha.toString().split('T')[0].split('-').reverse().slice(0, 2).join('/'),
+        hora: item.hora ? item.hora.toString().slice(0, 5) : "00:00",
+        color: item.color,
+        avisar: item.notificado
+      }));
+      setExamenes(mapped);
+    } catch (e) { console.error(e); }
+  };
+
   useEffect(() => {
+    loadData();
     registerForPushNotificationsAsync();
-    notificationListener.current = Notifications.addNotificationReceivedListener(notification => {});
-    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {});
+    notificationListener.current = Notifications.addNotificationReceivedListener(notification => { });
+    responseListener.current = Notifications.addNotificationResponseReceivedListener(response => { });
     return () => {
       if (notificationListener.current) notificationListener.current.remove();
       if (responseListener.current) responseListener.current.remove();
@@ -59,7 +72,7 @@ export default function FinalesScreen() {
     const [dia, mes] = fechaStr.split('/').map(Number);
     const hoy = new Date();
     let anio = hoy.getFullYear();
-    if (mes < (hoy.getMonth() + 1)) anio += 1; 
+    if (mes < (hoy.getMonth() + 1)) anio += 1;
     return new Date(anio, mes - 1, dia);
   };
 
@@ -87,23 +100,25 @@ export default function FinalesScreen() {
       "Se eliminará de tu lista.",
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "Borrar", style: "destructive", onPress: () => setExamenes(prev => prev.filter(e => e.id !== id)) }
+        {
+          text: "Borrar", style: "destructive", onPress: async () => {
+            try {
+              await api.deleteFinal(id);
+              loadData();
+            } catch (e) { Alert.alert("Error al borrar"); }
+          }
+        }
       ]
     );
   };
 
   // --- NUEVA LÓGICA DE TOGGLE NOTIFICACIÓN ---
+  // (Simplified for now as backend update is not implemented)
   const toggleNotificacion = (id) => {
     setExamenes(prev => prev.map(e => {
       if (e.id === id) {
         const nuevoEstado = !e.avisar;
-        // Feedback visual simple
-        if (nuevoEstado) {
-            Alert.alert("🔔 Activado", `Te avisaremos 24hs antes de ${e.materia}`);
-            // Aquí llamarías a scheduleNotificationAsync realmente
-        } else {
-            // Aquí cancelarías la notificación
-        }
+        if (nuevoEstado) Alert.alert("🔔 Activado", `Te avisaremos 24hs antes de ${e.materia}`);
         return { ...e, avisar: nuevoEstado };
       }
       return e;
@@ -116,7 +131,7 @@ export default function FinalesScreen() {
     if (limpio.length > 2) limpio = limpio.slice(0, 2) + '/' + limpio.slice(2, 4);
     setNuevaFecha(limpio);
   };
-  
+
   const handleChangeHora = (text) => {
     let limpio = text.replace(/[^0-9]/g, '');
     if (limpio.length > 2) limpio = limpio.slice(0, 2) + ':' + limpio.slice(2, 4);
@@ -143,18 +158,24 @@ export default function FinalesScreen() {
   const handleAgregar = async () => {
     if (!nuevaMateria || nuevaFecha.length < 5) return Alert.alert("Faltan datos");
 
-    const nuevo = { 
-      id: Date.now(), 
-      materia: nuevaMateria.toUpperCase(), 
-      fecha: nuevaFecha, 
-      hora: nuevaHora || "09:00", 
+    const [d, m] = nuevaFecha.split('/');
+    const currentYear = new Date().getFullYear();
+    const isoDate = `${currentYear}-${m}-${d}`;
+
+    const nuevo = {
+      materiaNombre: nuevaMateria.toUpperCase(),
+      fecha: isoDate,
+      hora: nuevaHora || "09:00",
       color: nuevoColor,
-      avisar: true // Por defecto avisar
     };
 
-    setExamenes([...examenes, nuevo]);
-    setModalVisible(false);
-    await testNotificacion(nuevaMateria, nuevaHora);
+    try {
+      await api.createFinal(nuevo);
+      setModalVisible(false);
+      loadData();
+      await testNotificacion(nuevaMateria, nuevaHora);
+    } catch (e) { Alert.alert("Error creando"); }
+
     setNuevaMateria(''); setNuevaFecha(''); setNuevaHora(''); setNuevoColor(PALETA_COLORES[0]);
   };
 
@@ -173,7 +194,7 @@ export default function FinalesScreen() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
       <SafeAreaView style={styles.safeArea}>
-        
+
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()} style={styles.iconBtn}>
             <Ionicons name="close" size={30} color="#333" />
@@ -185,21 +206,21 @@ export default function FinalesScreen() {
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          
+
           {getExamenesOrdenados().map((examen) => (
             <View key={examen.id} style={styles.swipeWrapper}>
-              <ScrollView 
-                horizontal 
+              <ScrollView
+                horizontal
                 showsHorizontalScrollIndicator={false}
-                snapToOffsets={[0, BUTTON_WIDTH]} 
+                snapToOffsets={[0, BUTTON_WIDTH]}
                 snapToEnd={false}
                 decelerationRate="fast"
                 contentContainerStyle={{ width: CARD_WIDTH + BUTTON_WIDTH }}
               >
-                
+
                 {/* TARJETA */}
                 <View style={[styles.card, { backgroundColor: examen.color }]}>
-                  
+
                   {/* Ícono Circular */}
                   <View style={styles.iconCircle}>
                     <Ionicons name="star" size={24} color={examen.color} />
@@ -213,22 +234,22 @@ export default function FinalesScreen() {
                   </View>
 
                   {/* --- BOTÓN DE CAMPANA (NOTIFICACIÓN) --- */}
-                  <TouchableOpacity 
-                    style={styles.bellButton} 
+                  <TouchableOpacity
+                    style={styles.bellButton}
                     onPress={() => toggleNotificacion(examen.id)}
                   >
-                    <Ionicons 
-                        name={examen.avisar ? "notifications" : "notifications-off"} 
-                        size={24} 
-                        color="rgba(255,255,255,0.9)" 
+                    <Ionicons
+                      name={examen.avisar ? "notifications" : "notifications-off"}
+                      size={24}
+                      color="rgba(255,255,255,0.9)"
                     />
                   </TouchableOpacity>
 
                 </View>
 
                 {/* BOTÓN BORRAR (SWIPE) */}
-                <TouchableOpacity 
-                  style={styles.deleteButton} 
+                <TouchableOpacity
+                  style={styles.deleteButton}
                   onPress={() => confirmarEliminacion(examen.id)}
                   activeOpacity={0.8}
                 >
@@ -238,16 +259,16 @@ export default function FinalesScreen() {
               </ScrollView>
             </View>
           ))}
-          
+
           {examenes.length === 0 && (
-             <Text style={styles.emptyText}>No hay cuentas regresivas activas.</Text>
+            <Text style={styles.emptyText}>No hay cuentas regresivas activas.</Text>
           )}
 
-          <View style={{height: 100}}/>
+          <View style={{ height: 100 }} />
         </ScrollView>
 
         <TouchableOpacity style={styles.fab} onPress={() => setModalVisible(true)}>
-          <Ionicons name="add" size={32} color="#007AFF" /> 
+          <Ionicons name="add" size={32} color="#007AFF" />
         </TouchableOpacity>
       </SafeAreaView>
 
@@ -256,22 +277,22 @@ export default function FinalesScreen() {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Nueva Cuenta Regresiva</Text>
-            
+
             <Text style={styles.label}>Título</Text>
-            <TextInput 
-              style={styles.input} 
-              placeholder="Ej: FINAL ARQUITECTURA" 
-              value={nuevaMateria} 
-              onChangeText={setNuevaMateria} 
+            <TextInput
+              style={styles.input}
+              placeholder="Ej: FINAL ARQUITECTURA"
+              value={nuevaMateria}
+              onChangeText={setNuevaMateria}
               autoCapitalize="characters"
             />
-            
+
             <View style={styles.rowInputs}>
-              <View style={{flex: 1, marginRight: 10}}>
+              <View style={{ flex: 1, marginRight: 10 }}>
                 <Text style={styles.label}>Fecha (DD/MM)</Text>
                 <TextInput style={styles.input} placeholder="19/02" value={nuevaFecha} onChangeText={handleChangeFecha} keyboardType="numeric" maxLength={5} />
               </View>
-              <View style={{flex: 1}}>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.label}>Hora</Text>
                 <TextInput style={styles.input} placeholder="09:00" value={nuevaHora} onChangeText={handleChangeHora} keyboardType="numeric" maxLength={5} />
               </View>
@@ -280,8 +301,8 @@ export default function FinalesScreen() {
             <Text style={styles.label}>Elige un color</Text>
             <View style={styles.colorPalette}>
               {PALETA_COLORES.map(color => (
-                <TouchableOpacity 
-                  key={color} 
+                <TouchableOpacity
+                  key={color}
                   style={[styles.colorCircle, { backgroundColor: color }, nuevoColor === color && styles.colorSelected]}
                   onPress={() => setNuevoColor(color)}
                 >
@@ -308,8 +329,8 @@ export default function FinalesScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   safeArea: { flex: 1 },
-  header: { 
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', 
+  header: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 20, paddingTop: 10, paddingBottom: 10
   },
   headerTitle: { fontSize: 24, fontWeight: '800', color: '#000' },
@@ -318,24 +339,24 @@ const styles = StyleSheet.create({
   swipeWrapper: { marginBottom: 15, borderRadius: 14, overflow: 'hidden' },
 
   card: {
-    borderRadius: 14, 
+    borderRadius: 14,
     padding: 15,
-    flexDirection: 'row', 
-    alignItems: 'center', 
+    flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'flex-start',
     width: CARD_WIDTH,
     height: 90,
     elevation: 3,
-    shadowColor: "#000", shadowOffset: {width: 0, height: 2}, shadowOpacity: 0.2, shadowRadius: 3
+    shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 3
   },
-  
+
   iconCircle: {
     width: 50, height: 50, borderRadius: 25,
     backgroundColor: '#fff',
     justifyContent: 'center', alignItems: 'center',
     marginRight: 15
   },
-  
+
   cardInfo: { flex: 1 },
   cardTitle: { fontSize: 16, fontWeight: '900', color: '#fff', marginBottom: 2, letterSpacing: 0.5 },
   cardDate: { fontSize: 13, color: 'rgba(255,255,255,0.9)', marginBottom: 2 },
@@ -362,7 +383,7 @@ const styles = StyleSheet.create({
   emptyText: { textAlign: 'center', color: '#999', marginTop: 40, fontSize: 16 },
   fab: {
     position: 'absolute', bottom: 30, right: 20,
-    backgroundColor: '#F2F2F7', borderRadius: 30, 
+    backgroundColor: '#F2F2F7', borderRadius: 30,
     width: 60, height: 60,
     justifyContent: 'center', alignItems: 'center',
     shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 5, elevation: 5
