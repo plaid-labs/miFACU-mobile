@@ -1,50 +1,142 @@
 import { useRouter } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { supabase } from '../src/services/supabase';
 
 export default function HomeScreen() {
   const router = useRouter();
+  const [materias, setMaterias] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState(null);
 
-  // Datos falsos (MOCK) para probar el diseño
-  const materias = [
-    { id: 1, nombre: 'Análisis Matemático I', estado: 'aprobada' },
-    { id: 2, nombre: 'Álgebra y Geometría', estado: 'aprobada' },
-    { id: 3, nombre: 'Sistemas y Organizaciones', estado: 'aprobada' },
-    { id: 4, nombre: 'Arquitectura de Computadoras', estado: 'cursada' },
-    { id: 5, nombre: 'Programación I', estado: 'cursando' },
-    { id: 6, nombre: 'Física I', estado: 'pendiente' },
-  ];
+  useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  async function cargarDatos() {
+    setLoading(true);
+    try {
+      // 1. Intentamos obtener el usuario (pero no frenamos si no hay)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) setUserId(user.id);
+
+      // 2. Traemos TODAS las materias (Esto se hace SIEMPRE)
+      const { data: materiasData, error: errorMat } = await supabase
+        .from('materias')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (errorMat) throw errorMat;
+
+      let avancesData = [];
+
+      // 3. Si hay usuario, buscamos sus avances. Si no, lista vacía.
+      if (user) {
+        const { data, error: errorAva } = await supabase
+          .from('avances')
+          .select('*')
+          .eq('user_id', user.id);
+          
+        if (!errorAva) avancesData = data;
+      }
+
+      // 4. Fusionamos los datos
+      const materiasCombinadas = materiasData.map(materia => {
+        const avance = avancesData.find(a => a.materia_id === materia.id);
+        return {
+          ...materia,
+          estado: avance ? avance.estado : 'pendiente'
+        };
+      });
+
+      setMaterias(materiasCombinadas);
+
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Ocurrió un problema cargando las materias");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Función para cambiar estado (con protección para invitados)
+  async function toggleMateria(materiaId, estadoActual) {
+    if (!userId) {
+      Alert.alert("Modo Invitado", "Necesitas iniciar sesión para guardar tu progreso.");
+      return;
+    }
+
+    // 1. Ciclo de estados: Pendiente -> Cursando -> Aprobada -> Pendiente
+    let nuevoEstado = 'pendiente';
+    if (estadoActual === 'pendiente') nuevoEstado = 'cursando';
+    else if (estadoActual === 'cursando') nuevoEstado = 'aprobada';
+    else if (estadoActual === 'aprobada') nuevoEstado = 'pendiente';
+
+    // 2. Actualización visual inmediata (Optimistic UI)
+    const materiasActualizadas = materias.map(m => 
+      m.id === materiaId ? { ...m, estado: nuevoEstado } : m
+    );
+    setMaterias(materiasActualizadas);
+
+    // 3. Guardar en Supabase
+    try {
+      const { error } = await supabase
+        .from('avances')
+        .upsert({ 
+          user_id: userId, 
+          materia_id: materiaId, 
+          estado: nuevoEstado 
+        }, { onConflict: 'user_id, materia_id' });
+
+      if (error) throw error;
+    } catch (error) {
+      Alert.alert("Error guardando", error.message);
+      cargarDatos(); // Si falla, recargamos para deshacer el cambio visual
+    }
+  }
 
   const getColor = (estado) => {
     switch(estado) {
-      case 'aprobada': return '#4CAF50'; // Verde
-      case 'cursada': return '#FFC107';  // Amarillo
-      case 'cursando': return '#2196F3'; // Azul
-      default: return '#333';            // Gris
+      case 'aprobada': return '#4CAF50';
+      case 'cursando': return '#2196F3';
+      case 'pendiente': return '#333';
+      default: return '#333';
     }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Hola, Futuro Ingeniero 👷</Text>
-        <Text style={styles.subtitle}>Tu progreso en Sistemas</Text>
+        <Text style={styles.title}>Mi Progreso 🚀</Text>
+        <Text style={styles.subtitle}>
+            {userId ? "Guardando en la nube" : "Modo Invitado (Solo lectura)"}
+        </Text>
       </View>
 
-      <ScrollView style={styles.list}>
-        {materias.map((materia) => (
-          <TouchableOpacity key={materia.id} style={styles.card}>
-            <View style={[styles.statusIndicator, { backgroundColor: getColor(materia.estado) }]} />
-            <View style={styles.cardContent}>
-              <Text style={styles.materiaName}>{materia.nombre}</Text>
-              <Text style={styles.materiaStatus}>{materia.estado.toUpperCase()}</Text>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <TouchableOpacity onPress={() => router.back()} style={styles.logoutButton}>
-        <Text style={styles.logoutText}>Cerrar Sesión</Text>
+      {loading ? (
+        <View style={styles.center}><ActivityIndicator size="large" color="#fff" /></View>
+      ) : (
+        <ScrollView style={styles.list}>
+          {materias.map((materia) => (
+            <TouchableOpacity 
+              key={materia.id} 
+              style={[styles.card, { borderColor: getColor(materia.estado), borderWidth: 1 }]}
+              onPress={() => toggleMateria(materia.id, materia.estado)}
+            >
+              <View style={[styles.statusIndicator, { backgroundColor: getColor(materia.estado) }]} />
+              <View style={styles.cardContent}>
+                <Text style={styles.materiaName}>{materia.nombre}</Text>
+                <Text style={[styles.materiaInfo, { color: getColor(materia.estado) }]}>
+                   {materia.estado.toUpperCase()}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+      
+      <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <Text style={{color: '#aaa'}}>Volver</Text>
       </TouchableOpacity>
     </View>
   );
@@ -52,22 +144,22 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', padding: 20, paddingTop: 60 },
-  header: { marginBottom: 30 },
-  title: { color: '#fff', fontSize: 24, fontWeight: 'bold' },
-  subtitle: { color: '#888', fontSize: 16 },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  header: { marginBottom: 20 },
+  title: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
+  subtitle: { color: '#666', fontSize: 16 },
   list: { flex: 1 },
   card: { 
-    backgroundColor: '#1A1A1A', 
-    marginBottom: 15, 
+    backgroundColor: '#111', 
+    marginBottom: 12, 
     borderRadius: 12, 
     flexDirection: 'row',
-    overflow: 'hidden',
-    height: 80
+    height: 75,
+    overflow: 'hidden'
   },
-  statusIndicator: { width: 6, height: '100%' },
+  statusIndicator: { width: 8, height: '100%' },
   cardContent: { padding: 15, justifyContent: 'center' },
-  materiaName: { color: '#fff', fontSize: 18, fontWeight: '600' },
-  materiaStatus: { color: '#aaa', fontSize: 12, marginTop: 5, letterSpacing: 1 },
-  logoutButton: { marginTop: 20, alignItems: 'center', padding: 10 },
-  logoutText: { color: '#ef4444' }
+  materiaName: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  materiaInfo: { fontSize: 12, fontWeight: 'bold', marginTop: 4, letterSpacing: 1 },
+  backButton: { padding: 20, alignItems: 'center' }
 });

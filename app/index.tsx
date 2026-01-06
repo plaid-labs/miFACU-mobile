@@ -1,48 +1,46 @@
 import { useRouter } from 'expo-router';
-import * as Linking from 'expo-linking'; // Necesario para volver a la app
-import * as WebBrowser from 'expo-web-browser'; // Necesario para abrir Chrome/Safari
-import React from 'react';
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
+import React, { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../src/services/supabase';
 
-// Esto le dice a AuthSession que maneje la redirección
 WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
-  async function signInWithGoogle() {
-    try {
-      // 1. Iniciar el proceso de OAuth
-      // Esto genera una URL especial de Supabase que redirige a Google
-      const redirectUrl = Linking.createURL('/auth/callback'); 
-      
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl, // Le decimos a Supabase: "Cuando termine Google, vuelve aquí"
-        },
-      });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
 
-      if (error) throw error;
+  // Verificar si ya hay sesión al entrar
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) router.replace('/home');
+    });
+  }, []);
 
-      // 2. Abrir el navegador del celular con esa URL
-      if (data.url) {
-        const result = await WebBrowser.openAuthSessionAsync(data.url, redirectUrl);
-        
-        // Si el usuario cerró el navegador o terminó
-        if (result.type === 'success') {
-            // Aquí hay un truco: Supabase a veces maneja la sesión automáticamente
-            // al volver, pero idealmente deberíamos capturar el token de la URL.
-            // Para Expo Go simple, a veces basta con verificar la sesión:
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                Alert.alert("¡Éxito!", "Bienvenido con Google 🚀");
-            }
-        }
-      }
-    } catch (error) {
-      Alert.alert("Error", error instanceof Error ? error.message : "Error desconocido");
-    }
+  async function signInWithEmail() {
+    setLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email,
+      password: password,
+    });
+
+    if (error) Alert.alert("Error", error.message);
+    else router.replace('/home'); // Si entra, vamos al Home
+    setLoading(false);
+  }
+
+  async function signUpWithEmail() {
+    setLoading(true);
+    const { error } = await supabase.auth.signUp({
+      email: email,
+      password: password,
+    });
+
+    if (error) Alert.alert("Error", error.message);
+    else Alert.alert("Cuenta creada", "¡Ya puedes iniciar sesión!");
+    setLoading(false);
   }
 
   return (
@@ -50,46 +48,74 @@ export default function LoginScreen() {
       <Text style={styles.logo}>PLAID LABS 🚀</Text> 
       <Text style={styles.subtitle}>miFacu Mobile</Text>
 
-      {/* Botón de Google */}
-      <TouchableOpacity style={styles.googleButton} onPress={signInWithGoogle}>
-        <Text style={styles.googleButtonText}>INGRESAR CON GOOGLE</Text>
+      {/* --- FORMULARIO EMAIL --- */}
+      <View style={styles.inputContainer}>
+        <TextInput 
+          style={styles.input} 
+          placeholder="Email" 
+          placeholderTextColor="#666"
+          onChangeText={setEmail}
+          value={email}
+          autoCapitalize="none"
+          keyboardType="email-address"
+        />
+        <TextInput 
+          style={styles.input} 
+          placeholder="Contraseña (min 6 caracteres)" 
+          placeholderTextColor="#666"
+          secureTextEntry={true}
+          onChangeText={setPassword}
+          value={password}
+        />
+      </View>
+      
+      <View style={styles.rowButtons}>
+        <TouchableOpacity style={styles.actionButton} onPress={signInWithEmail} disabled={loading}>
+          <Text style={styles.buttonText}>{loading ? "..." : "Ingresar"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.actionButton, styles.outlineButton]} onPress={signUpWithEmail} disabled={loading}>
+          <Text style={styles.outlineText}>Crear Cuenta</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider}>
+        <View style={styles.line} /><Text style={{color:'#666', marginHorizontal:10}}>O</Text><View style={styles.line} />
+      </View>
+
+      {/* --- BOTONES EXTRA --- */}
+      <TouchableOpacity style={styles.googleButton} onPress={() => Alert.alert("Pronto","Configuraremos Google en el próximo paso")}>
+        <Text style={styles.googleButtonText}>G  Ingresar con Google</Text>
       </TouchableOpacity>
 
-      {/* BOTÓN TEMPORAL DE DESARROLLO */}
-      <TouchableOpacity
-        style={{ marginTop: 20, padding: 10 }}
-        onPress={() => router.push('/home')}
-      >
-        <Text style={{ color: 'yellow', textAlign: 'center' }}>
-          🚧 Entrar como Invitado (DEV)
-        </Text>
+      <TouchableOpacity style={styles.guestButton} onPress={() => router.push('/home')}>
+        <Text style={styles.guestText}>🚧 Entrar como Invitado</Text>
       </TouchableOpacity>
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 20,
+  container: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  logo: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 5 },
+  subtitle: { color: '#aaa', fontSize: 18, marginBottom: 40 },
+  inputContainer: { width: '100%', marginBottom: 10 },
+  input: {
+    backgroundColor: '#1A1A1A', color: '#fff', padding: 15, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#333',
   },
-  logo: {
-    color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 10,
+  rowButtons: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 20 },
+  actionButton: {
+    flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 12, alignItems: 'center', marginHorizontal: 5
   },
-  subtitle: {
-    color: '#aaa', fontSize: 18, marginBottom: 50,
-  },
+  buttonText: { color: '#000', fontWeight: 'bold' },
+  outlineButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#fff' },
+  outlineText: { color: '#fff', fontWeight: 'bold' },
+  divider: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 20 },
+  line: { flex: 1, height: 1, backgroundColor: '#333' },
   googleButton: {
-    backgroundColor: '#fff', // Blanco como Google
-    width: '100%',
-    padding: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginBottom: 10,
+    backgroundColor: '#EA4335', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10,
   },
-  googleButtonText: {
-    color: '#000',
-    fontWeight: 'bold',
-    fontSize: 16,
-  },
+  googleButtonText: { color: '#fff', fontWeight: 'bold' },
+  guestButton: { padding: 10 },
+  guestText: { color: 'yellow' }
 });
