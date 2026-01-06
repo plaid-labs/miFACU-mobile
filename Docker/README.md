@@ -9,54 +9,33 @@ Este directorio contiene la configuración de Docker para dockerizar el backend 
 
 ## Configuración
 
-### Paso 1: Crear archivo `.env`
+1. **Crear archivo `.env` en el backend** (si no existe):
+   ```bash
+   cd ../backend
+   # Si no tienes .env, crea uno basado en el ejemplo
+   # O copia desde Docker/.env.example
+   ```
 
-**⚠️ IMPORTANTE:** Debes crear el archivo `.env` antes de iniciar Docker.
+2. **Configurar variables de entorno** en `../backend/.env`:
+   ```env
+   # URL de conexión a Supabase (obligatorio)
+   DATABASE_URL=postgresql://postgres:password@db.tu-proyecto.supabase.co:5432/postgres
+   
+   # Credenciales de Supabase (opcional)
+   SUPABASE_URL=https://tu-proyecto.supabase.co
+   SUPABASE_KEY=tu-supabase-key-aqui
+   
+   # Puerto del servidor (opcional, por defecto 4000)
+   PORT=4000
+   
+   # Entorno
+   NODE_ENV=production
+   ```
 
-**Opción A - Usando el script (Windows PowerShell):**
-```powershell
-cd Docker
-.\setup-env.ps1
-```
-
-**Opción B - Manualmente:**
-```powershell
-cd backend
-# Si existe .env.example:
-Copy-Item .env.example .env
-# Si no existe, crea el archivo manualmente
-```
-
-### Paso 2: Configurar variables de entorno
-
-Edita el archivo `backend/.env` y completa con tus valores:
-
-```env
-# URL de conexión a Supabase (OBLIGATORIO)
-# Obtén esta URL desde: Supabase Dashboard > Settings > Database > Connection string > URI
-DATABASE_URL=postgresql://postgres:TU_PASSWORD@db.TU_PROYECTO.supabase.co:5432/postgres
-
-# Credenciales de Supabase (opcional)
-SUPABASE_URL=https://TU_PROYECTO.supabase.co
-SUPABASE_KEY=tu-supabase-anon-key-aqui
-
-# Puerto del servidor (opcional, por defecto 4000)
-PORT=4000
-
-# Entorno
-NODE_ENV=production
-```
-
-**📝 Cómo obtener DATABASE_URL de Supabase:**
-1. Ve a tu proyecto en [Supabase Dashboard](https://app.supabase.com)
-2. Settings → Database
-3. Connection string → URI
-4. Copia la URL y reemplaza `[YOUR-PASSWORD]` con tu contraseña real
-
-**⚠️ IMPORTANTE:** 
-- El archivo `.env` debe estar en `backend/.env` (no en `Docker/`)
-- No subas el archivo `.env` a Git (ya está en .gitignore)
-- Sin el archivo `.env`, el contenedor no iniciará correctamente
+   **⚠️ IMPORTANTE:** 
+   - El archivo `.env` debe estar en `backend/.env`
+   - No subas el archivo `.env` a Git (ya está en .gitignore)
+   - Si usas Supabase, obtén la `DATABASE_URL` desde el panel de Supabase (Settings > Database > Connection string)
 
 ## Uso
 

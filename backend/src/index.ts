@@ -12,7 +12,7 @@ import materiasRoutes from './routes/materias.routes';
 dotenv.config();
 
 const app = express();
-const port = parseInt(process.env.PORT || '4000', 10);
+const port = process.env.PORT || 4000;
 
 // Middleware
 app.use(cors());
@@ -203,30 +203,19 @@ const startServer = async () => {
     if (!process.env.DATABASE_URL) {
         console.error('\n❌ ERROR: DATABASE_URL no está configurada');
         console.error('Por favor, configura DATABASE_URL en tu archivo .env');
-        console.error('Ejemplo: DATABASE_URL=postgresql://user:password@host:port/database');
-        console.error('\n📝 Pasos para solucionar:');
-        console.error('   1. Crea un archivo .env en la carpeta backend/');
-        console.error('   2. Agrega: DATABASE_URL=tu_url_de_supabase');
-        console.error('   3. Si usas Docker, asegúrate de que el archivo .env exista en backend/.env\n');
-        // En Docker, no hacer exit inmediatamente para poder ver los logs
-        if (process.env.NODE_ENV === 'production') {
-            console.error('⚠️  El contenedor se reiniciará en 10 segundos...');
-            setTimeout(() => process.exit(1), 10000);
-        } else {
-            process.exit(1);
-        }
-        return;
+        console.error('Ejemplo: DATABASE_URL=postgresql://user:password@host:port/database\n');
+        process.exit(1);
     }
 
     try {
         await AppDataSource.initialize();
         console.log("✅ Data Source has been initialized!");
 
-        app.listen(port, '0.0.0.0', () => {
+        app.listen(port, () => {
             console.log('\n' + '='.repeat(60));
             console.log('🚀  MiFacu Backend - Servidor Iniciado Correctamente');
             console.log('='.repeat(60));
-            console.log(`✅  Servidor corriendo en: http://0.0.0.0:${port}`);
+            console.log(`✅  Servidor corriendo en: http://localhost:${port}`);
             console.log(`📊  Entorno: ${process.env.NODE_ENV || 'development'}`);
             console.log(`💾  Base de datos: ${AppDataSource.isInitialized ? '✓ Conectada' : '⏳ Conectando...'}`);
             console.log(`📡  Endpoints disponibles:`);
