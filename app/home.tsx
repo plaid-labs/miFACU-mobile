@@ -16,8 +16,8 @@ export default function HomeScreen() {
   }, []);
 
   // Componente para los botones de la grilla
-  const GridButton = ({ icon, label, library = "Ionicons" }: { icon: any, label: string, library?: string }) => (
-    <TouchableOpacity style={styles.gridButton}>
+  const GridButton = ({ icon, label, library = "Ionicons", onPress }: { icon: any, label: string, library?: string, onPress?: () => void }) => (
+    <TouchableOpacity style={styles.gridButton} onPress={onPress}>
       <View style={styles.iconContainer}>
         {library === "Ionicons" && <Ionicons name={icon} size={28} color="#2E5EC9" />}
         {library === "Material" && <MaterialCommunityIcons name={icon} size={28} color="#2E5EC9" />}
@@ -77,7 +77,7 @@ export default function HomeScreen() {
         <Text style={styles.sectionTitle}>¿Qué necesitás hoy?</Text>
 
         <View style={styles.gridContainer}>
-          <GridButton icon="document-text-outline" label="Materias" />
+          <GridButton icon="document-text-outline" label="Materias" onPress={() => router.push('/plan-mapa')} />
           <GridButton icon="car-sport-outline" label="Estacionamiento" />
           <GridButton icon="briefcase-outline" label="Pasantías" />
           <GridButton icon="heart-outline" label="Salud" />
