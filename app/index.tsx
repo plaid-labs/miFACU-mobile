@@ -1,46 +1,64 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import * as WebBrowser from 'expo-web-browser';
 import React, { useEffect, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { supabase } from '../src/services/supabase';
-
-WebBrowser.maybeCompleteAuthSession();
 
 export default function LoginScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [nombre, setNombre] = useState('');
 
-  // Verificar si ya hay sesión al entrar
+  // Verificamos si ya hay un usuario guardado
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/home');
-    });
+    chequearSesion();
   }, []);
 
-  async function signInWithEmail() {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
-
-    if (error) Alert.alert("Error", error.message);
-    else router.replace('/home'); // Si entra, vamos al Home
-    setLoading(false);
+  async function chequearSesion() {
+    const usuarioGuardado = await AsyncStorage.getItem('usuario_nombre');
+    if (usuarioGuardado) {
+      console.log("Usuario detectado:", usuarioGuardado);
+      // router.replace('/home'); // Descomenta esto si quieres login automático
+    }
   }
 
-  async function signUpWithEmail() {
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: email,
-      password: password,
-    });
+  // 1. Entrar con nombre propio
+  async function ingresarConNombre() {
+    if (nombre.trim().length < 2) {
+      Alert.alert("Nombre muy corto", "Pon al menos 2 letras.");
+      return;
+    }
+    await guardarYEntrar(nombre.trim().toLowerCase());
+  }
 
-    if (error) Alert.alert("Error", error.message);
-    else Alert.alert("Cuenta creada", "¡Ya puedes iniciar sesión!");
-    setLoading(false);
+  // 2. Entrar como USUARIO DEMO (Compartido)
+  async function ingresarComoDemo() {
+    Alert.alert(
+      "Modo Tester 🧪", 
+      "Entrarás con el usuario compartido 'demo'.\nTodos los que usen este botón verán los mismos datos.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        { text: "Entrar", onPress: () => guardarYEntrar('usuario_demo') } // ID FIJO
+      ]
+    );
+  }
+
+  // 3. Entrar como Invitado Random
+  async function ingresarComoInvitado() {
+    let idInvitado = await AsyncStorage.getItem('usuario_nombre');
+    if (!idInvitado || !idInvitado.startsWith('invitado_')) {
+      const numeroRandom = Math.floor(Math.random() * 10000);
+      idInvitado = `invitado_${numeroRandom}`;
+    }
+    await guardarYEntrar(idInvitado);
+  }
+
+  // Función común para guardar y navegar
+  async function guardarYEntrar(usuarioId) {
+    try {
+      await AsyncStorage.setItem('usuario_nombre', usuarioId);
+      router.replace('/home');
+    } catch (e) {
+      Alert.alert("Error", "No se pudo guardar la sesión.");
+    }
   }
 
   return (
@@ -48,49 +66,37 @@ export default function LoginScreen() {
       <Text style={styles.logo}>PLAID LABS 🚀</Text> 
       <Text style={styles.subtitle}>miFacu Mobile</Text>
 
-      {/* --- FORMULARIO EMAIL --- */}
-      <View style={styles.inputContainer}>
-        <TextInput 
-          style={styles.input} 
-          placeholder="Email" 
-          placeholderTextColor="#666"
-          onChangeText={setEmail}
-          value={email}
-          autoCapitalize="none"
-          keyboardType="email-address"
-        />
-        <TextInput 
-          style={styles.input} 
-          placeholder="Contraseña (min 6 caracteres)" 
-          placeholderTextColor="#666"
-          secureTextEntry={true}
-          onChangeText={setPassword}
-          value={password}
-        />
-      </View>
-      
-      <View style={styles.rowButtons}>
-        <TouchableOpacity style={styles.actionButton} onPress={signInWithEmail} disabled={loading}>
-          <Text style={styles.buttonText}>{loading ? "..." : "Ingresar"}</Text>
-        </TouchableOpacity>
+      {/* --- OPCIÓN 1: USUARIO DEMO (El más importante ahora) --- */}
+      <TouchableOpacity style={styles.buttonDemo} onPress={ingresarComoDemo}>
+        <Text style={styles.demoText}>🧪 ENTRAR COMO TESTER</Text>
+        <Text style={styles.demoSubtext}>(Cuenta compartida por todos)</Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.actionButton, styles.outlineButton]} onPress={signUpWithEmail} disabled={loading}>
-          <Text style={styles.outlineText}>Crear Cuenta</Text>
+      <Text style={{color: '#333', marginVertical: 20}}>──────── O ────────</Text>
+
+      {/* --- OPCIÓN 2: NOMBRE PROPIO --- */}
+      <View style={styles.card}>
+        <Text style={styles.label}>Tu nombre personal:</Text>
+        <TextInput 
+          style={styles.input} 
+          placeholder="Ej: Matias" 
+          placeholderTextColor="#666"
+          onChangeText={setNombre}
+          value={nombre}
+          autoCapitalize="words"
+        />
+        <TouchableOpacity style={styles.buttonMain} onPress={ingresarConNombre}>
+          <Text style={styles.buttonText}>Entrar</Text>
         </TouchableOpacity>
       </View>
 
-      <View style={styles.divider}>
-        <View style={styles.line} /><Text style={{color:'#666', marginHorizontal:10}}>O</Text><View style={styles.line} />
-      </View>
-
-      {/* --- BOTONES EXTRA --- */}
-      <TouchableOpacity style={styles.googleButton} onPress={() => Alert.alert("Pronto","Configuraremos Google en el próximo paso")}>
-        <Text style={styles.googleButtonText}>G  Ingresar con Google</Text>
+      {/* --- OPCIÓN 3: INVITADO --- */}
+      <TouchableOpacity onPress={ingresarComoInvitado} style={{ marginTop: 30 }}>
+        <Text style={{ color: '#666', textDecorationLine: 'underline' }}>
+          Entrar como anónimo (Random)
+        </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.guestButton} onPress={() => router.push('/home')}>
-        <Text style={styles.guestText}>🚧 Entrar como Invitado</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -99,23 +105,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', padding: 20 },
   logo: { color: '#fff', fontSize: 32, fontWeight: 'bold', marginBottom: 5 },
   subtitle: { color: '#aaa', fontSize: 18, marginBottom: 40 },
-  inputContainer: { width: '100%', marginBottom: 10 },
+  
+  // Estilos del Botón Demo
+  buttonDemo: { 
+    width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', 
+    backgroundColor: '#FFD700', // Dorado
+    shadowColor: "#FFD700", shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 10, elevation: 5
+  },
+  demoText: { color: '#000', fontWeight: 'bold', fontSize: 18 },
+  demoSubtext: { color: '#333', fontSize: 12 },
+
+  // Estilos Tarjeta
+  card: { width: '100%', backgroundColor: '#111', padding: 20, borderRadius: 16, borderWidth: 1, borderColor: '#333', marginTop: 10 },
+  label: { color: '#fff', marginBottom: 10, fontWeight: 'bold' },
   input: {
-    backgroundColor: '#1A1A1A', color: '#fff', padding: 15, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#333',
+    backgroundColor: '#000', color: '#fff', padding: 15, borderRadius: 8, marginBottom: 15, borderWidth: 1, borderColor: '#333', fontSize: 16
   },
-  rowButtons: { flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginBottom: 20 },
-  actionButton: {
-    flex: 1, backgroundColor: '#fff', padding: 15, borderRadius: 12, alignItems: 'center', marginHorizontal: 5
-  },
-  buttonText: { color: '#000', fontWeight: 'bold' },
-  outlineButton: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#fff' },
-  outlineText: { color: '#fff', fontWeight: 'bold' },
-  divider: { flexDirection: 'row', alignItems: 'center', width: '100%', marginBottom: 20 },
-  line: { flex: 1, height: 1, backgroundColor: '#333' },
-  googleButton: {
-    backgroundColor: '#EA4335', width: '100%', padding: 15, borderRadius: 12, alignItems: 'center', marginBottom: 10,
-  },
-  googleButtonText: { color: '#fff', fontWeight: 'bold' },
-  guestButton: { padding: 10 },
-  guestText: { color: 'yellow' }
+  buttonMain: { backgroundColor: '#333', padding: 15, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#555' },
+  buttonText: { color: '#fff', fontWeight: 'bold', fontSize: 16 },
 });
