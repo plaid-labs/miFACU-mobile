@@ -8,36 +8,45 @@ export default function HomeScreen() {
   const router = useRouter();
   const [usuario, setUsuario] = useState('Estudiante');
 
-  // Cargamos el nombre guardado (Matias)
   useEffect(() => {
     AsyncStorage.getItem('usuario_nombre').then(nombre => {
       if (nombre) setUsuario(nombre.charAt(0).toUpperCase() + nombre.slice(1));
     });
   }, []);
 
-  // Componente para los botones de la grilla
-  const GridButton = ({ icon, label, library = "Ionicons", onPress }: { icon: any, label: string, library?: string, onPress?: () => void }) => (
-    <TouchableOpacity style={styles.gridButton} onPress={onPress}>
+  // Componente de Botón de Grilla Reutilizable
+  const GridButton = ({ icon, label, route, library = "Ionicons", color = "#2E5EC9", special = false }: {
+    icon: string;
+    label: string;
+    route?: string;
+    library?: string;
+    color?: string;
+    special?: boolean;
+  }) => (
+    <TouchableOpacity
+      style={[styles.gridButton, special && { backgroundColor: '#6200EA' }]}
+      onPress={() => route && router.push(route as any)}
+    >
       <View style={styles.iconContainer}>
-        {library === "Ionicons" && <Ionicons name={icon} size={28} color="#2E5EC9" />}
-        {library === "Material" && <MaterialCommunityIcons name={icon} size={28} color="#2E5EC9" />}
-        {library === "FontAwesome" && <FontAwesome5 name={icon} size={24} color="#2E5EC9" />}
+        {library === "Ionicons" && <Ionicons name={icon as any} size={28} color={special ? "#fff" : color} />}
+        {library === "Material" && <MaterialCommunityIcons name={icon as any} size={28} color={special ? "#fff" : color} />}
+        {library === "FontAwesome" && <FontAwesome5 name={icon as any} size={24} color={special ? "#fff" : color} />}
       </View>
-      <Text style={styles.gridLabel}>{label}</Text>
+      <Text style={[styles.gridLabel, special && { color: '#fff', fontWeight: 'bold' }]}>{label}</Text>
     </TouchableOpacity>
   );
 
   return (
     <View style={styles.mainContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#2E5EC9" />
-
-      {/* 1. HEADER AZUL */}
+      
+      {/* HEADER AZUL */}
       <View style={styles.headerContainer}>
         <SafeAreaView>
           <View style={styles.topBar}>
             <TouchableOpacity><Ionicons name="menu" size={30} color="#fff" /></TouchableOpacity>
             <Text style={styles.logoText}>miFacu</Text>
-            <TouchableOpacity style={styles.profileIcon}>
+            <TouchableOpacity style={styles.profileIcon} onPress={() => router.push('/perfil' as any)}>
                <Ionicons name="person" size={20} color="#2E5EC9" />
                <View style={styles.badge}><Ionicons name="checkmark" size={10} color="#fff" /></View>
             </TouchableOpacity>
@@ -47,22 +56,20 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView style={styles.contentContainer} showsVerticalScrollIndicator={false}>
-
-        {/* 2. TARJETAS DE ESTADO */}
-        {/* Tarjeta Blanca (Exámenes/Turnos) */}
-        <View style={styles.cardWhite}>
+        
+        {/* Tarjetas de Estado */}
+        <TouchableOpacity style={styles.cardWhite} onPress={() => router.push('/finales' as any)}>
           <View style={styles.cardRow}>
             <MaterialCommunityIcons name="ticket-confirmation-outline" size={40} color="#2E5EC9" style={{marginRight: 15}} />
             <View style={{flex: 1}}>
-              <Text style={styles.cardTitle}>No tenés exámenes programados.</Text>
-              <TouchableOpacity style={styles.smallButton}>
-                <Text style={styles.smallButtonText}>Inscribite acá</Text>
-              </TouchableOpacity>
+              <Text style={styles.cardTitle}>Inscripción a Finales</Text>
+              <View style={styles.smallButton}>
+                <Text style={styles.smallButtonText}>Ver Mesas</Text>
+              </View>
             </View>
           </View>
-        </View>
+        </TouchableOpacity>
 
-        {/* Tarjeta Verde (Regularidad) */}
         <View style={styles.cardGreen}>
           <View style={styles.cardRow}>
             <Text style={styles.greenCardText}>¡Tu regularidad está al día!</Text>
@@ -73,34 +80,41 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* 3. GRILLA DE ACCESOS ("¿Qué necesitás hoy?") */}
-        <Text style={styles.sectionTitle}>¿Qué necesitás hoy?</Text>
-
+        {/* SECCIÓN ACADÉMICA (Lo Nuevo) */}
+        <Text style={styles.sectionTitle}>Gestión Académica</Text>
         <View style={styles.gridContainer}>
-          <GridButton icon="document-text-outline" label="Materias" onPress={() => router.push('/plan-mapa')} />
-          <GridButton icon="car-sport-outline" label="Estacionamiento" />
-          <GridButton icon="briefcase-outline" label="Pasantías" />
-          <GridButton icon="heart-outline" label="Salud" />
-          <GridButton icon="cash-outline" label="Cuotas" />
-          <GridButton icon="file-tray-full-outline" label="Trámites" />
-          <GridButton icon="calendar-outline" label="Turnos" />
+          {/* BOTÓN 1: MIS MATERIAS (Lista Real) */}
+          <GridButton 
+            icon="list" 
+            label="Mis Materias" 
+            route="/plan-estudios" 
+          />
+          
+          {/* BOTÓN 2: SIMULADOR (Juego) - Destacado en Violeta */}
+          <TouchableOpacity 
+            style={[styles.gridButton, { backgroundColor: '#6200EA' }]} 
+            onPress={() => router.push('/plan-mapa')}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name="game-controller" size={28} color="#fff" />
+            </View>
+            <Text style={[styles.gridLabel, { color: '#fff', fontWeight: 'bold' }]}>Simulador</Text>
+          </TouchableOpacity>
+
+          <GridButton icon="calendar-outline" label="Horarios" route="/horarios" />
           <GridButton icon="library-outline" label="Biblioteca" />
         </View>
 
-        {/* 4. BANNER INFERIOR */}
-        <TouchableOpacity style={styles.bottomBanner}>
-          <View style={styles.bannerIconCircle}>
-             <Ionicons name="person-outline" size={24} color="#C2185B" />
-          </View>
-          <View style={{marginLeft: 15}}>
-            <Text style={styles.bannerTitle}>Completá tu perfil</Text>
-            <Text style={styles.bannerSubtitle}>Mantené todos tus datos actualizados</Text>
-          </View>
-        </TouchableOpacity>
+        {/* SECCIÓN TRÁMITES */}
+        <Text style={styles.sectionTitle}>Trámites y Consultas</Text>
+        <View style={styles.gridContainer}>
+          <GridButton icon="car-sport-outline" label="Estacionam." />
+          <GridButton icon="briefcase-outline" label="Pasantías" />
+          <GridButton icon="heart-outline" label="Salud" />
+          <GridButton icon="cash-outline" label="Cuotas" />
+        </View>
 
-        {/* Espacio extra abajo para que no se tape con el menú del celular */}
-        <View style={{height: 100}} />
-
+        <View style={{height: 50}} />
       </ScrollView>
     </View>
   );
@@ -108,74 +122,24 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   mainContainer: { flex: 1, backgroundColor: '#F2F2F2' },
-
-  // Header Styles
-  headerContainer: {
-    backgroundColor: '#2E5EC9', // El azul de miArgentina
-    paddingHorizontal: 20,
-    paddingBottom: 25,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    paddingTop: 10 // Ajuste para status bar
-  },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-    marginTop: 10
-  },
+  headerContainer: { backgroundColor: '#2E5EC9', paddingHorizontal: 20, paddingBottom: 25, borderBottomLeftRadius: 20, borderBottomRightRadius: 20, paddingTop: 10 },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, marginTop: 10 },
   logoText: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  profileIcon: {
-    width: 35, height: 35, backgroundColor: '#fff', borderRadius: 20,
-    justifyContent: 'center', alignItems: 'center', position: 'relative'
-  },
-  badge: {
-    position: 'absolute', bottom: -2, right: -2, backgroundColor: '#2E5EC9',
-    borderRadius: 10, width: 14, height: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#fff'
-  },
+  profileIcon: { width: 35, height: 35, backgroundColor: '#fff', borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  badge: { position: 'absolute', bottom: -2, right: -2, backgroundColor: '#2E5EC9', borderRadius: 10, width: 14, height: 14, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#fff' },
   greetingText: { color: '#fff', fontSize: 26, fontWeight: 'bold', textAlign: 'center' },
-
-  // Content
-  contentContainer: { flex: 1, paddingHorizontal: 15, marginTop: -20 }, // marginTop negativo para solapar cards
-
-  // Cards
-  cardWhite: {
-    backgroundColor: '#fff', borderRadius: 10, padding: 20,
-    marginBottom: 15, elevation: 4, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 5, shadowOffset: {width:0, height:2}
-  },
-  cardGreen: {
-    backgroundColor: '#D1F2EB', borderRadius: 10, padding: 20,
-    marginBottom: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between'
-  },
+  contentContainer: { flex: 1, paddingHorizontal: 15, marginTop: -20 },
+  cardWhite: { backgroundColor: '#fff', borderRadius: 10, padding: 20, marginBottom: 15, elevation: 4 },
+  cardGreen: { backgroundColor: '#D1F2EB', borderRadius: 10, padding: 20, marginBottom: 25, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardRow: { flexDirection: 'row', alignItems: 'center' },
   cardTitle: { fontSize: 16, color: '#333', fontWeight: '600', marginBottom: 10 },
   smallButton: { backgroundColor: '#2E5EC9', paddingVertical: 8, paddingHorizontal: 15, borderRadius: 20, alignSelf: 'flex-start' },
   smallButtonText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-
   greenCardText: { flex: 1, fontSize: 16, color: '#145A32', fontWeight: '600' },
   greenCheckBadge: { position: 'absolute', top: 0, right: 0, backgroundColor: '#28B463', borderRadius: 10, width: 16, height: 16, justifyContent: 'center', alignItems: 'center' },
-
-  // Grid
-  sectionTitle: { fontSize: 20, fontWeight: 'bold', color: '#333', marginBottom: 15 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 10, marginTop: 5 },
   gridContainer: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
-  gridButton: {
-    width: '23%', // 4 columnas aprox
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingVertical: 15,
-    alignItems: 'center',
-    marginBottom: 10,
-    elevation: 2, shadowColor: '#000', shadowOpacity: 0.05
-  },
+  gridButton: { width: '23%', backgroundColor: '#fff', borderRadius: 12, paddingVertical: 15, alignItems: 'center', marginBottom: 10, elevation: 2 },
   iconContainer: { marginBottom: 8 },
   gridLabel: { fontSize: 11, color: '#555', textAlign: 'center' },
-
-  // Bottom Banner
-  bottomBanner: {
-    backgroundColor: '#FADBD8', borderRadius: 12, padding: 15, flexDirection: 'row', alignItems: 'center', marginTop: 10
-  },
-  bannerIconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F5B7B1', justifyContent: 'center', alignItems: 'center' },
-  bannerTitle: { fontSize: 16, fontWeight: 'bold', color: '#7B241C' },
-  bannerSubtitle: { fontSize: 13, color: '#7B241C' }
 });
