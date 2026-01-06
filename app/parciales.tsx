@@ -133,19 +133,31 @@ export default function ParcialesScreen() {
   };
 
   const handleAgregar = async () => {
-    if (!nuevaMateria || !nuevoTitulo || nuevaFecha.length < 5) return Alert.alert("Faltan datos");
+    if (!nuevaMateria || !nuevoTitulo || nuevaFecha.length < 5) {
+      Alert.alert("Faltan datos", "Por favor completa todos los campos requeridos");
+      return;
+    }
 
     // Convert DD/MM -> YYYY-MM-DD for backend
     const [d, m] = nuevaFecha.split('/');
     const currentYear = new Date().getFullYear();
-    const isoDate = `${currentYear}-${m}-${d}`;
+    // Asegurar formato correcto con padding
+    const dia = d.padStart(2, '0');
+    const mes = m.padStart(2, '0');
+    const isoDate = `${currentYear}-${mes}-${dia}`;
+
+    // Formatear hora correctamente (HH:MM -> HH:MM:SS)
+    let horaFormateada = nuevaHora || "18:00";
+    if (horaFormateada.length === 5 && horaFormateada.includes(':')) {
+      horaFormateada = horaFormateada + ':00'; // Agregar segundos si no están
+    }
 
     const nuevo = {
       nombre: nuevoTitulo.toUpperCase(),
       materiaNombre: nuevaMateria.toUpperCase(),
       tipo: nuevoTipo === 'PARCIAL' ? 'Parcial' : 'Entrega',
       fecha: isoDate,
-      hora: nuevaHora || "18:00",
+      hora: horaFormateada,
       color: nuevoColor
     };
 
@@ -154,8 +166,11 @@ export default function ParcialesScreen() {
       setModalVisible(false);
       loadData(); // Reload from DB
       await programarNotificacion(nuevoTitulo, nuevaMateria, nuevoTipo);
+      Alert.alert("Éxito", "Recordatorio creado correctamente");
     } catch (e) {
-      Alert.alert("Error creando evento");
+      console.error("Error creando recordatorio:", e);
+      const errorMessage = e instanceof Error ? e.message : "Error desconocido al crear el recordatorio";
+      Alert.alert("Error", errorMessage);
     }
 
     // Reset
